@@ -58,11 +58,12 @@ export class Cinema {
     container.prepend(this.renderer.domElement);
     this.scene.fog=new THREE.FogExp2('#667d8e',.006);
     this.scene.add(this.ambient);
+    const softFill=new THREE.DirectionalLight('#c1d6dd',.65);softFill.position.set(9,12,20);this.scene.add(softFill);
     this.sun.position.set(-35,60,-45);this.sun.castShadow=true;
     this.sun.shadow.mapSize.set(this.mobile?1024:2048,this.mobile?1024:2048);
     this.sun.shadow.camera.left=-22;this.sun.shadow.camera.right=22;this.sun.shadow.camera.top=22;this.sun.shadow.camera.bottom=-22;this.sun.shadow.camera.far=160;
     this.sun.shadow.normalBias=.035;this.sun.shadow.bias=-.00015;this.scene.add(this.sun);
-    this.sky=createSky(this.scene);this.environment=createEnvironment(this.scene,this.mobile);this.rain=createRain(this.scene,this.mobile);
+    this.sky=createSky(this.scene);this.environment=createEnvironment(this.scene,this.mobile);this.rain=createRain(this.scene,this.mobile,this.environment.water);
     this.composer=new EffectComposer(this.renderer);this.composer.addPass(new RenderPass(this.scene,this.camera));
     this.bloom=new UnrealBloomPass(new THREE.Vector2(1000,420),.17,.6,1.05);this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
@@ -109,7 +110,7 @@ export class Cinema {
       if(this.lowRuns>=2&&this.tier>.55){this.tier-=.15;this.renderer.setPixelRatio(Math.min(devicePixelRatio,this.mobile?1.25:1.5)*this.tier);this.composer.setPixelRatio(this.renderer.getPixelRatio());this.resize();this.lowRuns=0;}
     }
   }
-  dispose(){this.resizeObserver.disconnect();this.environment.reflector.getRenderTarget().dispose();this.scene.traverse(o=>{if(o instanceof THREE.Mesh){o.geometry.dispose();(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m.dispose());}});this.composer.dispose();this.renderer.dispose();}
+  dispose(){this.resizeObserver.disconnect();this.environment.reflector.getRenderTarget().dispose();this.environment.water.texture.dispose();this.scene.traverse(o=>{if(o instanceof THREE.Mesh){o.geometry.dispose();(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m.dispose());}});this.composer.dispose();this.renderer.dispose();}
 }
 
 

@@ -39,3 +39,7 @@ https://sketchfab.com/3d-models/weathering-with-you-amano-hina-471a8c8c745d4e149
 
 本项目是非官方场景研究。《天气之子》及其角色名称用于说明创作主题。没有包含电影截图、原片视频或原声音乐。第三方模型许可只说明该作者提供资产的使用条件，不表明官方授权或背书。
 
+
+## 本次程序化细节
+
+`src/details.ts` 的木材、石材与金属纹理为代码生成 DataTexture；题牌为本地 Canvas 绘制的“晴天”文字；绳股、五金、排水口、裂纹与落叶均为原创程序化几何。`src/water.ts` 的积水遮罩和水波、`src/weather.ts` 的小水滴由代码生成，不引入外部图片或音频资产。

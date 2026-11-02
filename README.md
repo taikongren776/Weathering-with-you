@@ -52,6 +52,7 @@ https://sketchfab.com/3d-models/hina-amano-33a0dc6df31443889a03177d1996f116
 - `src/timeline.ts`：独立电影时钟与确定性天气曲线。
 - `src/cinema.ts`：相机、灯光、后处理、渲染质量调整。
 - `src/environment.ts`、`src/sky.ts`、`src/weather.ts`：程序化场景。
+- `src/water.ts`、`src/details.ts`：共享积水遮罩、衰减水波、飞溅时序与屋顶材质/构造细节。
 - `src/character.ts`：可选 GLB 与骨骼适配器。
 - `src/audio.ts`：原创噪声环境音与和声，无电影原声。
 - `src/main.ts`、`src/style.css`：播放界面与交互。

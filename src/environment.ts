@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { Reflector } from 'three/addons/objects/Reflector.js';
+import { createWater, waterFragment } from './water';
+import { surface, addRoofDetails } from './details';
 
 export function seeded(seed=7319) {return ()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};}
 const v3=(x:number,y:number,z:number)=>new THREE.Vector3(x,y,z);
@@ -8,7 +10,7 @@ function material(color:THREE.ColorRepresentation,roughness=.8){return new THREE
 export function createEnvironment(scene:THREE.Scene, mobile:boolean) {
   const random=seeded(), root=new THREE.Group();scene.add(root);
   const boxGeo=new THREE.BoxGeometry(1,1,1);
-  const stone=material('#59686a'), rim=material('#536064'), iron=material('#26383d',.5), red=material('#96392f',.64), darkWood=material('#252c2a'), gold=material('#b49a61',.4);
+  const stone=surface('stone','#778383'), rim=surface('stone','#697477'), iron=surface('metal','#45595c',.62), red=surface('wood','#b34b38',.62), darkWood=surface('wood','#4b483b'), gold=material('#b49a61',.4);
   const meshes:THREE.Mesh[]=[];
   function box(w:number,h:number,d:number,x:number,y:number,z:number,mat:THREE.Material,parent:THREE.Object3D=root,rounded=false){
     const mesh=new THREE.Mesh(rounded?new RoundedBoxGeometry(w,h,d,2,.055):boxGeo,mat);
@@ -111,11 +113,12 @@ export function createEnvironment(scene:THREE.Scene, mobile:boolean) {
   }
 
   // Stone approach deliberately stays open along the camera path.
-  for(let i=0;i<11;i++)box(1.8,.08,.9,(random()-.5)*.08,.21,11-i*1.05,material(i%2?'#8c9384':'#77867d'),root,true);
+  const pathPale=surface('stone','#a0a292',.75),pathDark=surface('stone','#89978b',.75);
+  for(let i=0;i<11;i++)box(1.8,.08,.9,(random()-.5)*.08,.21,11-i*1.05,i%2?pathPale:pathDark,root,true);
   box(4.6,.18,3.3,0,.22,-1.1,stone,root,true);
   // Torii: tapered round pillars, curved lintel, black cap, metal footings.
   for(const x of [-2.35,2.35]){
-    const pillar=new THREE.Mesh(new THREE.CylinderGeometry(.21,.28,5.3,16),red);
+    const pillar=new THREE.Mesh(new THREE.CylinderGeometry(.21,.28,5.3,32),red);
     pillar.position.set(x,2.85,0);pillar.rotation.z=-Math.sign(x)*.025;pillar.castShadow=true;root.add(pillar);
     const foot=new THREE.Mesh(new THREE.CylinderGeometry(.32,.34,.5,16),darkWood);foot.position.set(x,.47,0);root.add(foot);
     box(.78,.22,.78,x,.24,0,rim,root,true);
@@ -168,18 +171,29 @@ export function createEnvironment(scene:THREE.Scene, mobile:boolean) {
     if(Math.abs(x)<3.2 && z>-10)x=Math.sign(x||1)*(3.3+random()*6);
     dummy.position.set(x,.18,z);dummy.rotation.set(0,random()*Math.PI,0);const h=.35+random()*.8;dummy.scale.set(.6+random(),h,1);dummy.updateMatrix();grass.setMatrixAt(i,dummy.matrix);grass.setColorAt(i,new THREE.Color().setHSL(.22+random()*.12,.25,.35+random()*.2));
   }root.add(grass);
-  // A single planar reflection with procedural puddle coverage.
+  addRoofDetails(root,mobile,darkWood,stone,iron);
+  const water=createWater(mobile);
+  // World-space puddles with damped capillary waves in the reflected image.
   const reflector=new Reflector(new THREE.PlaneGeometry(23,29),{textureWidth:mobile?512:1024,textureHeight:mobile?512:1024,color:0x8ca8b1,clipBias:.005});
   reflector.rotation.x=-Math.PI/2;reflector.position.y=.165;
   const reflectionMaterial=reflector.material as THREE.ShaderMaterial; reflectionMaterial.transparent=true;reflectionMaterial.depthWrite=false;
-  reflectionMaterial.vertexShader='varying vec2 vFloorUv;\n'+reflectionMaterial.vertexShader.replace('vUv = textureMatrix', 'vFloorUv=uv; vUv = textureMatrix');
-  reflectionMaterial.fragmentShader='varying vec2 vFloorUv;\n'+reflectionMaterial.fragmentShader;
+  Object.assign(reflectionMaterial.uniforms,water.uniforms);
+  reflectionMaterial.vertexShader='varying vec2 vWaterPosition; varying vec3 vWaterView;\n'+reflectionMaterial.vertexShader.replace('vUv = textureMatrix', 'vWaterPosition=vec2(position.x,-position.y); vWaterView=cameraPosition-(modelMatrix*vec4(position,1.)).xyz; vUv = textureMatrix');
+  reflectionMaterial.fragmentShader='varying vec3 vWaterView;\n'+waterFragment(water.count)+reflectionMaterial.fragmentShader;
+  reflectionMaterial.fragmentShader=reflectionMaterial.fragmentShader.replace('vec4 base = texture2DProj( tDiffuse, vUv );',`
+    vec2 slope=waterSlope(vWaterPosition);
+    vec4 projection=vUv; projection.xy+=slope*.018*projection.w;
+    vec4 base=texture2DProj(tDiffuse,projection);
+    float shimmer=dot(slope,normalize(vec2(-.4,.8)));
+    base.rgb+=shimmer*2.0;
+  `);
   reflectionMaterial.fragmentShader=reflectionMaterial.fragmentShader.replace('gl_FragColor = vec4( blendOverlay( base.rgb, color ), 1.0 );',`
-    vec2 pp=vFloorUv;
-    float puddle=sin(pp.x*54.+sin(pp.y*30.)*2.)*sin(pp.y*47.+sin(pp.x*23.));
-    gl_FragColor=vec4(blendOverlay(base.rgb,color),smoothstep(.12,.62,puddle)*.46);`);
+    float wet=puddleMask(vWaterPosition);
+    float fresnel=pow(1.-clamp(normalize(vWaterView).y,0.,1.),3.);
+    gl_FragColor=vec4(blendOverlay(base.rgb,color),wet*(.22+.43*fresnel));
+  `);
   root.add(reflector);
-  return {update(t:number){grassTime.value=t;papers.forEach((p,i)=>{p.rotation.x=Math.sin(t*1.8+i)*.11;p.rotation.z=Math.sin(t*1.1+i*2)*.09;});},reflector,city,meshes};
+  return {update(t:number){grassTime.value=t;papers.forEach((p,i)=>{p.rotation.x=Math.sin(t*1.8+i)*.11;p.rotation.z=Math.sin(t*1.1+i*2)*.09;});},reflector,city,meshes,water};
 }
 
 
